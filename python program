@@ -1,0 +1,105 @@
+import pandas as pd
+import numpy as np
+import re
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+from sklearn.model_selection import train_test_split
+from sklearn.feature_extraction.text import CountVectorizer, ENGLISH_STOP_WORDS
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.svm import LinearSVC
+from sklearn.metrics import (
+    classification_report,
+    confusion_matrix,
+    accuracy_score,
+    roc_auc_score
+)
+
+from wordcloud import WordCloud
+df = pd.read_csv("data/hair_serum_sentiment_dataset.csv")
+def preprocess(text):
+    text = text.lower()
+    text = re.sub(r"[^a-z\s]", "", text)
+    tokens = text.split()
+    return " ".join([t for t in tokens if t not in ENGLISH_STOP_WORDS])
+
+df["Processed_Review"] = df["review"].apply(preprocess)
+vectorizer = CountVectorizer()
+X = vectorizer.fit_transform(df["Processed_Review"])
+y = df["sentiment"]
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42
+)
+models = {
+    "Naive Bayes": MultinomialNB(),
+    "SVM": LinearSVC()
+}
+
+scores = {"Model": [], "Accuracy": [], "ROC AUC": []}
+
+for name, model in models.items():
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_test)
+
+    acc = accuracy_score(y_test, y_pred)
+
+    if hasattr(model, "decision_function"):
+        probs = model.decision_function(X_test)
+    else:
+        probs = y_pred
+
+    roc = roc_auc_score(y_test, probs)
+
+    scores["Model"].append(name)
+    scores["Accuracy"].append(acc)
+    scores["ROC AUC"].append(roc)
+
+    # Confusion Matrix
+    plt.figure(figsize=(4, 3))
+    sns.heatmap(confusion_matrix(y_test, y_pred),
+                annot=True, fmt="d", cmap="coolwarm")
+    plt.title(f"{name} Confusion Matrix")
+    plt.xlabel("Predicted")
+    plt.ylabel("Actual")
+    plt.show()
+plt.figure(figsize=(6, 4))
+sns.barplot(x=scores["Model"], y=scores["Accuracy"], palette="Blues_d")
+plt.title("Model Comparison - Accuracy")
+plt.ylim(0.5, 1.0)
+plt.ylabel("Accuracy Score")
+plt.show()
+plt.figure(figsize=(6, 4))
+sns.barplot(x=scores["Model"], y=scores["ROC AUC"], palette="Greens_d")
+plt.title("Model Comparison - ROC AUC")
+plt.ylim(0.5, 1.0)
+plt.ylabel("ROC AUC Score")
+plt.show()
+positive_text = " ".join(df[df["sentiment"] == 1]["Processed_Review"])
+negative_text = " ".join(df[df["sentiment"] == 0]["Processed_Review"])
+
+if positive_text:
+    wc_pos = WordCloud(
+        background_color="white",
+        colormap="Greens",
+        max_words=100
+    ).generate(positive_text)
+
+    plt.figure(figsize=(7, 5))
+    plt.imshow(wc_pos, interpolation="bilinear")
+    plt.axis("off")
+    plt.title("Word Cloud - Positive Reviews")
+    plt.show()
+
+if negative_text:
+    wc_neg = WordCloud(
+        background_color="black",
+        colormap="Reds",
+        max_words=100
+    ).generate(negative_text)
+
+    plt.figure(figsize=(7, 5))
+    plt.imshow(wc_neg, interpolation="bilinear")
+    plt.axis("off")
+    plt.title("Word Cloud - Negative Reviews")
+    plt.show()
